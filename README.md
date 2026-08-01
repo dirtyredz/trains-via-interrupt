@@ -1,7 +1,8 @@
 # trains-via-interrupt
 
-A Factorio mod: from a train stop's GUI, which trains are wired up to it through a schedule
-interrupt, and which want it right now. Vanilla shows neither.
+A Factorio mod. Your station says no trains are coming; six are parked at a holding station
+waiting for it. Vanilla's station window ignores interrupts, so this adds a panel showing which
+trains are wired up to a stop and which want it right now.
 
 **[What the mod does →](trains-via-interrupt/README.md)** — the mod itself lives in
 [`trains-via-interrupt/`](trains-via-interrupt/), since that folder is what gets zipped and
