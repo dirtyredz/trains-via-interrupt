@@ -3,7 +3,8 @@
 -- Vanilla's "Trains with this stop" tab lists only stations that sit in a train's schedule
 -- proper. A station named inside an interrupt is invisible from the station side, which was
 -- ruled "not a bug": interrupt targets aren't in the schedule until the temporary stop is
--- actually created. This mod fills that gap for *concrete* station references only.
+-- actually created. This mod fills that gap, and answers two separate questions about it --
+-- which trains are wired up to this stop, and which of them want it right now.
 
 local FRAME_NAME = "tvi-frame"
 local CONTENT_NAME = "tvi-content"

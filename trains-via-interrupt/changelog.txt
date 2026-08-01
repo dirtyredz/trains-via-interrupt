@@ -2,8 +2,11 @@
 Version: 0.1.0
 Date: 2026-08-01
   Features:
-    - Panel beside the train stop GUI listing trains that reach this station through an interrupt.
-    - Separate sections for trains arriving here, trains waiting on this stop's train limit, and
-      trains whose interrupt is triggered by this stop.
-    - Click a row to open that train.
-    - Train groups are listed once rather than once per member.
+    - Panel beside the train stop GUI, showing two counts vanilla cannot.
+    - "Trains with this stop": every schedule whose interrupts name this station at all, as a
+      destination, as something to wait on, or as their trigger. One row per train group.
+    - "Trains waiting for this stop": trains that want the stop right now, either sent here by
+      an interrupt or held elsewhere until it has room. Trains already parked here are excluded.
+    - Parametrised station names are matched, so drop-offs named only by wildcard are found. A
+      generic interrupt counts only where the group shows evidence of hauling that item.
+    - Click a row to open the train.
