@@ -45,10 +45,14 @@ local function scan(station, force)
     local key = grouped and ("group:" .. group) or ("train:" .. train.id)
 
     if seen[key] then
-      seen[key].count = seen[key].count + 1
+      local entry = seen[key]
+      entry.count = entry.count + 1
+      -- Enough ids to make the tooltip useful without letting it run off screen.
+      if #entry.train_ids < 20 then entry.train_ids[#entry.train_ids + 1] = train.id end
     elseif schedule then
       local entry = {
         count = 1,
+        train_ids = { train.id },
         group = grouped and group or nil,
         train = train,
         arrives = {},
@@ -87,25 +91,44 @@ local function scan(station, force)
   return found
 end
 
---- "via Refuel, via Holding" for the row tooltip.
-local function via_tooltip(interrupt_names)
+--- Which interrupts matched, and which trains are behind a group row.
+local function row_tooltip(entry, interrupt_names)
   local parts = { "" }
   for index, name in pairs(interrupt_names) do
     if index > 1 then parts[#parts + 1] = "\n" end
     parts[#parts + 1] = name and { "tvi.via", name } or { "tvi.via-unnamed" }
   end
+
+  if entry.count > 1 then
+    parts[#parts + 1] = "\n"
+    local ids = {}
+    for index, id in pairs(entry.train_ids) do
+      ids[index] = tostring(id)
+    end
+    if entry.count > #entry.train_ids then
+      ids[#ids + 1] = "..."
+    end
+    parts[#parts + 1] = { "tvi.tooltip-trains", table.concat(ids, ", ") }
+  end
+
   return parts
 end
 
 local function add_section(container, caption_key, entries, field)
-  local rows = {}
+  -- A group shares one schedule, so it is scanned once -- but it stands for every train in
+  -- it, and the train count is what the player is actually asking about. Count trains here,
+  -- not rows, or a six-train group reads as "(1)".
+  local rows, trains = {}, 0
   for _, entry in pairs(entries) do
-    if #entry[field] > 0 then rows[#rows + 1] = entry end
+    if #entry[field] > 0 then
+      rows[#rows + 1] = entry
+      trains = trains + entry.count
+    end
   end
 
   container.add {
     type = "label",
-    caption = { caption_key, #rows },
+    caption = { caption_key, trains },
     style = "caption_label",
   }
 
@@ -115,13 +138,23 @@ local function add_section(container, caption_key, entries, field)
   end
 
   for _, entry in pairs(rows) do
-    container.add {
+    local caption
+    if entry.group then
+      -- Group names are often pure rich-text icons, which render as a caption with no
+      -- readable text at all. The count keeps every row legible.
+      caption = { "tvi.row-group", entry.group, entry.count }
+    else
+      caption = { "tvi.row-train", entry.train.id }
+    end
+
+    local button = container.add {
       type = "button",
       style = "list_box_item",
-      caption = entry.group or { "tvi.ungrouped", entry.train.id },
-      tooltip = via_tooltip(entry[field]),
+      caption = caption,
+      tooltip = row_tooltip(entry, entry[field]),
       tags = { tvi_train = entry.train.id },
     }
+    button.style.horizontally_stretchable = true
   end
 end
 
@@ -138,6 +171,7 @@ local function refresh(player, stop)
         position = defines.relative_gui_position.right,
       },
     }
+    frame.style.minimal_width = 260
     frame.add {
       type = "frame",
       name = CONTENT_NAME,
