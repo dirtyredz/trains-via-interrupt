@@ -1,0 +1,9 @@
+{
+  "name": "trains-via-interrupt",
+  "version": "0.1.0",
+  "title": "Trains via Interrupt",
+  "author": "David McClain",
+  "factorio_version": "2.1",
+  "description": "Adds a panel beside the train stop GUI listing trains that reach, wait on, or are triggered by that station through a schedule interrupt. Vanilla's 'Trains with this stop' tab deliberately omits these, so interrupt-driven trains are invisible from the station side.",
+  "dependencies": ["base >= 2.1"]
+}
