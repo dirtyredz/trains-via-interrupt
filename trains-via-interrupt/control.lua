@@ -180,6 +180,10 @@ local function refresh(player, stop)
     }
   end
 
+  -- Remember which station these results describe, so a panel left over from a previously
+  -- opened stop can be spotted and rebuilt rather than silently believed.
+  frame.tags = { tvi_station = stop.backer_name }
+
   local content = frame[CONTENT_NAME]
   content.clear()
 
@@ -197,6 +201,27 @@ script.on_event(defines.events.on_gui_opened, function(event)
   if not player then return end
 
   refresh(player, stop)
+end)
+
+-- The relative frame outlives any single opening, and on_gui_opened is not the only way the
+-- opened stop can change -- the stop GUI's own back/forward buttons walk between stops. A
+-- panel describing the station you were looking at a moment ago is worse than no panel, so
+-- confirm what is actually open rather than trusting the last event we saw.
+script.on_nth_tick(20, function()
+  for _, player in pairs(game.connected_players) do
+    local frame = player.gui.relative[FRAME_NAME]
+    if frame then
+      local stop = player.opened
+      local viewing_stop = player.opened_gui_type == defines.gui_type.entity
+        and stop and stop.valid and stop.type == "train-stop"
+
+      if not viewing_stop then
+        frame.destroy()
+      elseif frame.tags.tvi_station ~= stop.backer_name then
+        refresh(player, stop)
+      end
+    end
+  end
 end)
 
 script.on_event(defines.events.on_gui_click, function(event)
