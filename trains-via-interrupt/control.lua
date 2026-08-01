@@ -8,6 +8,12 @@
 local FRAME_NAME = "tvi-frame"
 local CONTENT_NAME = "tvi-content"
 
+-- Temporary diagnostic. Writes every interrupt's raw station references to
+-- script-output/tvi-dump.txt each time a stop is opened, so the panel's classification can be
+-- checked against what is actually stored. Done in the mod rather than via a /c command
+-- because console commands permanently disable achievements on the save. Set false to silence.
+local DEBUG_DUMP = true
+
 -- The only wait-condition types that carry a station name. Per the WaitCondition docs,
 -- `station` is populated for these four and nil everywhere else.
 local STATION_CONDITION = {
@@ -89,6 +95,42 @@ local function scan(station, force)
   end
 
   return found
+end
+
+--- Dump every station reference the scan can see. Names are bracketed so trailing spaces and
+--- rich-text icons are visible rather than invisible.
+local function dump(stop, player)
+  local lines = { "", "=== opened stop: [" .. stop.backer_name .. "] ===" }
+  local seen = {}
+
+  for _, train in pairs(game.train_manager.get_trains { force = player.force }) do
+    local schedule = train.get_schedule()
+    if schedule then
+      local group = schedule.group
+      local key = (group ~= nil and group ~= "") and group or ("train " .. train.id)
+
+      if not seen[key] then
+        seen[key] = true
+        lines[#lines + 1] = "-- " .. key
+        for _, interrupt in pairs(schedule.get_interrupts()) do
+          lines[#lines + 1] = "  interrupt [" .. tostring(interrupt.name) .. "]"
+          for _, condition in pairs(interrupt.conditions or {}) do
+            lines[#lines + 1] = "    cond " .. condition.type
+              .. " station=[" .. tostring(condition.station) .. "]"
+          end
+          for _, target in pairs(interrupt.targets or {}) do
+            lines[#lines + 1] = "    target station=[" .. tostring(target.station) .. "]"
+            for _, wait in pairs(target.wait_conditions or {}) do
+              lines[#lines + 1] = "      wait " .. wait.type
+                .. " station=[" .. tostring(wait.station) .. "]"
+            end
+          end
+        end
+      end
+    end
+  end
+
+  helpers.write_file("tvi-dump.txt", table.concat(lines, "\n") .. "\n", true)
 end
 
 --- Which interrupts matched, and which trains are behind a group row.
@@ -186,6 +228,8 @@ local function refresh(player, stop)
 
   local content = frame[CONTENT_NAME]
   content.clear()
+
+  if DEBUG_DUMP then dump(stop, player) end
 
   local entries = scan(stop.backer_name, player.force)
   add_section(content, "tvi.arrives", entries, "arrives")
