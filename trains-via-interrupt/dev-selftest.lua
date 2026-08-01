@@ -7,29 +7,49 @@
 
 local matching = require("matching")
 
--- reference stored in the interrupt, station being viewed, expected result
+local BRICK = "[item=stone-brick]"
+local IRON = "[item=iron-plate]"
+local OIL = "[fluid=crude-oil]"
+local DOWN = "[virtual-signal=down-arrow]"
+local ITEM_PARAM = "[virtual-signal=signal-item-parameter]"
+local FLUID_PARAM = "[virtual-signal=signal-fluid-parameter]"
+
+-- reference stored in the interrupt | station being viewed | icons the schedule deals in |
+-- expected kind
 local CASES = {
-  -- The drop-off is only ever named through the parametrised reference.
-  { "[virtual-signal=signal-item-parameter][virtual-signal=down-arrow]",
-    "[item=stone-brick][virtual-signal=down-arrow]", "wildcard" },
-  -- ...and must not also claim the pickup.
-  { "[virtual-signal=signal-item-parameter][virtual-signal=down-arrow]",
-    "[item=stone-brick]", nil },
-  -- The pickup is named literally.
-  { "[item=stone-brick]", "[item=stone-brick]", "exact" },
+  -- The drop-off is only ever named through the parametrised reference, so it has to match...
+  { ITEM_PARAM .. DOWN, BRICK .. DOWN, { BRICK }, "wildcard" },
+  -- ...but every group carries that same generic interrupt. Without checking what the group
+  -- actually hauls, the brick drop-off claims all 85 trains in the network.
+  { ITEM_PARAM .. DOWN, BRICK .. DOWN, { IRON }, nil },
+  { ITEM_PARAM .. DOWN, BRICK .. DOWN, {}, nil },
+  -- Evidence can come from anywhere in the schedule, not just the group name.
+  { ITEM_PARAM .. DOWN, BRICK .. DOWN, { IRON, BRICK }, "wildcard" },
+  -- The drop-off reference must not also claim the pickup.
+  { ITEM_PARAM .. DOWN, BRICK, { BRICK }, nil },
+  -- The pickup is named literally, and an exact match needs no evidence.
+  { BRICK, BRICK, {}, "exact" },
   -- A name must not match a station that merely starts with it.
-  { "[item=stone-brick]", "[item=stone-brick][virtual-signal=down-arrow]", nil },
+  { BRICK, BRICK .. DOWN, { BRICK }, nil },
   -- signal-fuel is an ordinary signal, not a wildcard.
-  { "[virtual-signal=signal-fuel]", "[virtual-signal=signal-fuel]", "exact" },
-  { "[virtual-signal=signal-item-parameter]", "[item=stone-brick]", "wildcard" },
-  { "[virtual-signal=signal-fluid-parameter][virtual-signal=down-arrow]",
-    "[fluid=crude-oil][virtual-signal=down-arrow]", "wildcard" },
+  { "[virtual-signal=signal-fuel]", "[virtual-signal=signal-fuel]", {}, "exact" },
+  { ITEM_PARAM, BRICK, { BRICK }, "wildcard" },
+  { FLUID_PARAM .. DOWN, OIL .. DOWN, { OIL }, "wildcard" },
+  { FLUID_PARAM .. DOWN, OIL .. DOWN, { BRICK }, nil },
   -- Wildcards can sit alongside plain text.
-  { "[virtual-signal=signal-item-parameter] Has Cargo", "[item=stone-brick] Has Cargo",
-    "wildcard" },
-  { "Holding Station", "Holding Station", "exact" },
-  { "Holding Station", "[item=stone-brick]", nil },
+  { ITEM_PARAM .. " Has Cargo", BRICK .. " Has Cargo", { BRICK }, "wildcard" },
+  { "Holding Station", "Holding Station", {}, "exact" },
+  { "Holding Station", BRICK, { BRICK }, nil },
 }
+
+local function run(case)
+  local candidates = {}
+  for _, icon in pairs(case[3]) do candidates[icon] = true end
+
+  local result = matching.match(case[1], case[2])
+  if result and not matching.plausible(result, candidates) then return nil end
+  return result and result.kind or nil
+end
 
 --- Exercise the schedule API against a real train.
 --
@@ -73,6 +93,9 @@ local function api_checks()
     lines[#lines + 1] = "PASS  get_record{schedule_index=current} -> station="
       .. tostring(record and record.station)
 
+    local records = schedule.get_records()
+    lines[#lines + 1] = "PASS  get_records -> " .. #records .. " record(s)"
+
     local interrupts = schedule.get_interrupts()
     lines[#lines + 1] = "PASS  get_interrupts -> " .. #interrupts .. " interrupt(s)"
 
@@ -89,13 +112,14 @@ return function()
   local lines, failures = {}, 0
 
   for _, case in pairs(CASES) do
-    local got = matching.reference_matches(case[1], case[2])
-    local ok = got == case[3]
+    local got = run(case)
+    local ok = got == case[4]
     if not ok then failures = failures + 1 end
     lines[#lines + 1] = (ok and "PASS" or "FAIL")
       .. "  ref=" .. case[1]
       .. "  station=" .. case[2]
-      .. "  expected=" .. tostring(case[3])
+      .. "  deals-in=" .. (#case[3] > 0 and table.concat(case[3], ",") or "nothing")
+      .. "  expected=" .. tostring(case[4])
       .. "  got=" .. tostring(got)
   end
 

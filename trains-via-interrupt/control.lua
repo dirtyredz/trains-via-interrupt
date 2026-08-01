@@ -18,28 +18,67 @@ local DEBUG_DUMP = false
 local SELF_TEST = false
 
 local matching = require("matching")
-local reference_matches = matching.reference_matches
-local conditions_match = matching.conditions_match
+
+--- The item and fluid icons a schedule demonstrably deals in: its group name, plus every
+--- station it names concretely. A wildcard on this schedule can only bind to one of these.
+--
+-- Every group carries the same generic interrupt, so without this a drop-off named
+-- "[item=brick][down-arrow]" matches the iron group's interrupt exactly as well as the brick
+-- group's, and the panel lists the entire network.
+local function schedule_candidates(schedule, group)
+  local candidates = matching.icons(group)
+
+  local function consider(reference)
+    if reference and not matching.has_wildcard(reference) then
+      matching.icons(reference, candidates)
+    end
+  end
+
+  for _, record in pairs(schedule.get_records() or {}) do
+    consider(record.station)
+  end
+
+  for _, interrupt in pairs(schedule.get_interrupts()) do
+    for _, condition in pairs(interrupt.conditions or {}) do
+      consider(condition.station)
+    end
+    for _, target in pairs(interrupt.targets or {}) do
+      consider(target.station)
+      for _, wait in pairs(target.wait_conditions or {}) do
+        consider(wait.station)
+      end
+    end
+  end
+
+  return candidates
+end
+
+--- Does this reference point at `station`, for a schedule dealing in `candidates`?
+local function refers_to(reference, station, candidates)
+  local result = matching.match(reference, station)
+  if result and matching.plausible(result, candidates) then return result end
+  return nil
+end
 
 --- Does any of this schedule's interrupts mention `station`, and how?
 -- Returns a list of { name = interrupt name, kind = "exact"|"wildcard" }, one per interrupt
 -- that refers to the station in any way at all -- as a place to send the train, as something
 -- to wait on, or as the trigger. This is the "is it wired up to this stop" question, so the
 -- three relationships are deliberately not distinguished.
-local function schedule_references(schedule, station)
+local function schedule_references(schedule, station, candidates)
   local references = {}
 
   for _, interrupt in pairs(schedule.get_interrupts()) do
     local name = interrupt.name ~= "" and interrupt.name or nil
-    local kind = conditions_match(interrupt.conditions, station)
+    local result = matching.conditions_match(interrupt.conditions, station, candidates)
 
     for _, target in pairs(interrupt.targets or {}) do
-      kind = kind
-        or reference_matches(target.station, station)
-        or conditions_match(target.wait_conditions, station)
+      result = result
+        or refers_to(target.station, station, candidates)
+        or matching.conditions_match(target.wait_conditions, station, candidates)
     end
 
-    if kind then references[#references + 1] = { name = name, kind = kind } end
+    if result then references[#references + 1] = { name = name, kind = result.kind } end
   end
 
   return references
@@ -49,13 +88,15 @@ end
 -- Its current schedule record is the one it is actually executing, so either that record
 -- sends it here, or the record's wait conditions hold it somewhere else until this station
 -- frees up. Both mean the train wants this stop and does not have it yet.
-local function waiting_for(schedule, station)
+local function waiting_for(schedule, station, candidates)
   -- `current` is a bare uint32 but get_record takes a ScheduleRecordPosition table.
   local record = schedule.get_record { schedule_index = schedule.current }
   if not record then return nil end
 
-  if reference_matches(record.station, station) then return "heading" end
-  if conditions_match(record.wait_conditions, station) then return "blocked" end
+  if refers_to(record.station, station, candidates) then return "heading" end
+  if matching.conditions_match(record.wait_conditions, station, candidates) then
+    return "blocked"
+  end
   return nil
 end
 
@@ -86,13 +127,14 @@ local function scan(station, force)
           train_ids = { train.id },
           group = grouped and group or nil,
           train = train,
-          references = schedule_references(schedule, station),
+          candidates = schedule_candidates(schedule, group),
         }
+        entry.references = schedule_references(schedule, station, entry.candidates)
         schedules[key] = entry
         if #entry.references > 0 then configured[#configured + 1] = entry end
       end
 
-      local state = waiting_for(schedule, station)
+      local state = waiting_for(schedule, station, entry.candidates)
       if state then
         waiting[#waiting + 1] = { train = train, group = entry.group, state = state }
       end
