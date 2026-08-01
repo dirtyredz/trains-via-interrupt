@@ -228,10 +228,13 @@ local function add_row(container, caption, tooltip, train_id)
   button.style.horizontally_stretchable = true
 end
 
+-- The two counts answer different questions and were read as the same one, so each header
+-- carries an explanation rather than relying on the wording of the caption alone.
 local function add_header(container, caption_key, count)
   container.add {
     type = "label",
     caption = { caption_key, count },
+    tooltip = { caption_key .. "-tooltip" },
     style = "caption_label",
   }
 end

@@ -6,48 +6,52 @@ different runtime, no shared code.
 
 | Mod | What it does |
 |---|---|
-| `trains-via-interrupt/` | Shows, from a train stop's GUI, which trains reach or wait on it via a schedule interrupt. |
+| [`trains-via-interrupt/`](trains-via-interrupt/README.md) | From a train stop's GUI: which trains are wired up to it through a schedule interrupt, and which want it right now. Vanilla shows neither. |
 
-## Testing a mod in game
+Target: **Factorio 2.1** (installed build is 2.1.12 + Space Age, Steam).
 
-Factorio loads unzipped mods whose folder name matches the mod's `name` in `info.json`.
-A directory junction keeps the source here and the game loading it live:
+Gotchas that cost real debugging — stale version fields, wildcard semantics, which API calls
+crash — are in [CLAUDE.md](CLAUDE.md). Read it before changing matching behaviour.
+
+## Running a mod in game
+
+Factorio loads unzipped mods whose folder name matches the mod's `name` in `info.json`. A
+directory junction keeps the source here and the game loading it live:
 
 ```bash
 cmd /c mklink /J "%APPDATA%\Factorio\mods\trains-via-interrupt" "C:\Users\dirty\factorio-mods\trains-via-interrupt"
 ```
 
-Junctions need no admin rights. After editing Lua, restart Factorio (or `/c game.reload_mods()`
-from the console in a save with cheats).
+Junctions need no admin rights. After editing Lua, **restart Factorio**.
 
-Target: **Factorio 2.1** (installed build is 2.1.12 + Space Age, Steam).
+> Don't reach for `/c game.reload_mods()`. Any console command permanently disables
+> achievements on that save, and it has to be confirmed twice. A restart is cheaper than it
+> looks.
 
-Note `player-data.json`'s `last-played-version` reported 2.0.77 and is stale — trust the
-version banner in the game's own log output, not that field.
+## Testing without launching the game
 
-## Smoke-testing without launching the game
-
-`--create` loads every mod and runs `control.lua`, then exits, so it catches syntax errors and
-bad `defines` in about 30 seconds. Use a throwaway config, otherwise it collides with the
-running game's data-dir lock:
+`--create` loads every mod, runs `control.lua`, and exits — about 30 seconds. Point it at a
+throwaway config, or it collides with the running game's data-dir lock:
 
 ```bash
 factorio.exe --create smoke.zip --mod-directory ./testmods --config ./config.ini
 ```
 
-where `config.ini` sets `write-data` to a scratch folder. A line reading
-`Checksum for script __<mod>__/control.lua` means the mod loaded clean.
+`config.ini` needs `write-data` set to a scratch folder. `Checksum for script
+__<mod>__/control.lua` in the output means the mod loaded.
 
-**Loading clean proves only that the file parses.** Two runtime bugs shipped past it — a GUI
-that counted the wrong thing, and `get_record` called with a bare number when it wants a
-`ScheduleRecordPosition` table. Neither could surface without a train to call them on.
+**That proves the file parses and nothing more.** Two runtime bugs shipped straight past it. So
+each mod carries a `dev-selftest.lua`: enable `SELF_TEST` in `control.lua` and the same
+`--create` run also exercises the mod's logic and builds a rail and a locomotive so the API is
+called against a real train. Results land in `script-output/tvi-selftest.txt` under the
+config's write-data path.
 
-So `dev-selftest.lua` (enable `SELF_TEST` in `control.lua`) runs during `on_init` and does two
-things: checks `matching.lua` against station names taken from a real save, and builds a rail
-and a locomotive so the schedule API is exercised for real. Results land in
-`script-output/tvi-selftest.txt` under the config's write-data path. **Add a case here whenever
-a new API call is introduced** — that is the only automated coverage of runtime behaviour.
+**Add a case whenever a new API call is introduced.** It is the only automated coverage of
+runtime behaviour, and anything needing a GUI is still uncovered — `--create` never opens one,
+so panel layout and event wiring need a human in game.
 
-Still not covered: anything that needs a GUI. `--create` never opens one, so the panel's
-layout and event wiring need a human in game.
+## Diagnostics from a real save
 
+To see what the owner's game actually contains, write a file from the mod (`helpers.write_file`
+lands in `script-output/`) and read it directly. Never ask them to paste a console command:
+same data, and it costs them the save's achievements.
