@@ -14,25 +14,12 @@ local CONTENT_NAME = "tvi-content"
 -- because console commands permanently disable achievements on the save. Set false to silence.
 local DEBUG_DUMP = true
 
--- The only wait-condition types that carry a station name. Per the WaitCondition docs,
--- `station` is populated for these four and nil everywhere else.
-local STATION_CONDITION = {
-  specific_destination_full = true,
-  specific_destination_not_full = true,
-  at_station = true,
-  not_at_station = true,
-}
+-- Runs the matcher's cases during --create and writes script-output/tvi-selftest.txt.
+local SELF_TEST = false
 
---- True if any condition in the list names this exact station.
-local function names_station(conditions, station)
-  if not conditions then return false end
-  for _, condition in pairs(conditions) do
-    if STATION_CONDITION[condition.type] and condition.station == station then
-      return true
-    end
-  end
-  return false
-end
+local matching = require("matching")
+local reference_matches = matching.reference_matches
+local conditions_match = matching.conditions_match
 
 --- Every train's interrupts, searched for literal references to `station`.
 --
@@ -70,19 +57,22 @@ local function scan(station, force)
         local name = interrupt.name ~= "" and interrupt.name or nil
 
         -- The stop's own state fires the interrupt.
-        if names_station(interrupt.conditions, station) then
-          entry.triggers[#entry.triggers + 1] = name
+        local trigger = conditions_match(interrupt.conditions, station)
+        if trigger then
+          entry.triggers[#entry.triggers + 1] = { name = name, kind = trigger }
         end
 
         for _, target in pairs(interrupt.targets or {}) do
           -- The train is actually sent here.
-          if target.station == station then
-            entry.arrives[#entry.arrives + 1] = name
+          local arrives = reference_matches(target.station, station)
+          if arrives then
+            entry.arrives[#entry.arrives + 1] = { name = name, kind = arrives }
           end
           -- The train sits somewhere else until this stop frees up. Vanilla shows nothing
           -- for this, yet these are the trains queued on your station's train limit.
-          if names_station(target.wait_conditions, station) then
-            entry.waits[#entry.waits + 1] = name
+          local waits = conditions_match(target.wait_conditions, station)
+          if waits then
+            entry.waits[#entry.waits + 1] = { name = name, kind = waits }
           end
         end
       end
@@ -134,11 +124,16 @@ local function dump(stop, player)
 end
 
 --- Which interrupts matched, and which trains are behind a group row.
-local function row_tooltip(entry, interrupt_names)
+local function row_tooltip(entry, matches)
   local parts = { "" }
-  for index, name in pairs(interrupt_names) do
+  for index, match in pairs(matches) do
     if index > 1 then parts[#parts + 1] = "\n" end
-    parts[#parts + 1] = name and { "tvi.via", name } or { "tvi.via-unnamed" }
+    local label = match.name or { "tvi.unnamed-interrupt" }
+    -- A generic interrupt only routes here when its wildcard happens to bind to this
+    -- station's icon, so say so rather than implying it always does.
+    parts[#parts + 1] = match.kind == "wildcard"
+      and { "tvi.via-generic", label }
+      or { "tvi.via", label }
   end
 
   if entry.count > 1 then
@@ -235,6 +230,10 @@ local function refresh(player, stop)
   add_section(content, "tvi.arrives", entries, "arrives")
   add_section(content, "tvi.waits", entries, "waits")
   add_section(content, "tvi.triggers", entries, "triggers")
+end
+
+if SELF_TEST then
+  script.on_init(require("dev-selftest"))
 end
 
 script.on_event(defines.events.on_gui_opened, function(event)
