@@ -12,7 +12,7 @@ local CONTENT_NAME = "tvi-content"
 -- script-output/tvi-dump.txt each time a stop is opened, so the panel's classification can be
 -- checked against what is actually stored. Done in the mod rather than via a /c command
 -- because console commands permanently disable achievements on the save. Set false to silence.
-local DEBUG_DUMP = true
+local DEBUG_DUMP = false
 
 -- Runs the matcher's cases during --create and writes script-output/tvi-selftest.txt.
 local SELF_TEST = false
@@ -21,70 +21,84 @@ local matching = require("matching")
 local reference_matches = matching.reference_matches
 local conditions_match = matching.conditions_match
 
---- Every train's interrupts, searched for literal references to `station`.
+--- Does any of this schedule's interrupts mention `station`, and how?
+-- Returns a list of { name = interrupt name, kind = "exact"|"wildcard" }, one per interrupt
+-- that refers to the station in any way at all -- as a place to send the train, as something
+-- to wait on, or as the trigger. This is the "is it wired up to this stop" question, so the
+-- three relationships are deliberately not distinguished.
+local function schedule_references(schedule, station)
+  local references = {}
+
+  for _, interrupt in pairs(schedule.get_interrupts()) do
+    local name = interrupt.name ~= "" and interrupt.name or nil
+    local kind = conditions_match(interrupt.conditions, station)
+
+    for _, target in pairs(interrupt.targets or {}) do
+      kind = kind
+        or reference_matches(target.station, station)
+        or conditions_match(target.wait_conditions, station)
+    end
+
+    if kind then references[#references + 1] = { name = name, kind = kind } end
+  end
+
+  return references
+end
+
+--- Is this train, right now, trying to get to `station`?
+-- Its current schedule record is the one it is actually executing, so either that record
+-- sends it here, or the record's wait conditions hold it somewhere else until this station
+-- frees up. Both mean the train wants this stop and does not have it yet.
+local function waiting_for(schedule, station)
+  local record = schedule.get_record(schedule.current)
+  if not record then return nil end
+
+  if reference_matches(record.station, station) then return "heading" end
+  if conditions_match(record.wait_conditions, station) then return "blocked" end
+  return nil
+end
+
+--- Both questions in one pass over the trains.
 --
--- Exact string equality is the entire filter, and that is the whole trick: a parametrised
--- target like "[item=parameter-0] pickup" never equals a real station name, so generic
--- interrupts fall out on their own and never have to be resolved. Resolving them is the
--- reason the base game declined to build this.
+-- Configured membership is a property of the schedule, so grouped trains share an answer and
+-- it is computed once per group. Live demand is a property of the individual train -- each one
+-- sits at its own point in the schedule -- so that is evaluated for every train.
 local function scan(station, force)
-  local seen, found = {}, {}
+  local schedules, configured, waiting = {}, {}, {}
 
   for _, train in pairs(game.train_manager.get_trains { force = force }) do
     local schedule = train.get_schedule()
-    local group = schedule and schedule.group
-    local grouped = group ~= nil and group ~= ""
-    -- Trains in a group share one schedule, so scan it once and count the members.
-    local key = grouped and ("group:" .. group) or ("train:" .. train.id)
 
-    if seen[key] then
-      local entry = seen[key]
-      entry.count = entry.count + 1
-      -- Enough ids to make the tooltip useful without letting it run off screen.
-      if #entry.train_ids < 20 then entry.train_ids[#entry.train_ids + 1] = train.id end
-    elseif schedule then
-      local entry = {
-        count = 1,
-        train_ids = { train.id },
-        group = grouped and group or nil,
-        train = train,
-        arrives = {},
-        waits = {},
-        triggers = {},
-      }
+    if schedule then
+      local group = schedule.group
+      local grouped = group ~= nil and group ~= ""
+      local key = grouped and ("group:" .. group) or ("train:" .. train.id)
+      local entry = schedules[key]
 
-      for _, interrupt in pairs(schedule.get_interrupts()) do
-        local name = interrupt.name ~= "" and interrupt.name or nil
-
-        -- The stop's own state fires the interrupt.
-        local trigger = conditions_match(interrupt.conditions, station)
-        if trigger then
-          entry.triggers[#entry.triggers + 1] = { name = name, kind = trigger }
-        end
-
-        for _, target in pairs(interrupt.targets or {}) do
-          -- The train is actually sent here.
-          local arrives = reference_matches(target.station, station)
-          if arrives then
-            entry.arrives[#entry.arrives + 1] = { name = name, kind = arrives }
-          end
-          -- The train sits somewhere else until this stop frees up. Vanilla shows nothing
-          -- for this, yet these are the trains queued on your station's train limit.
-          local waits = conditions_match(target.wait_conditions, station)
-          if waits then
-            entry.waits[#entry.waits + 1] = { name = name, kind = waits }
-          end
-        end
+      if entry then
+        entry.count = entry.count + 1
+        -- Enough ids to make the tooltip useful without letting it run off screen.
+        if #entry.train_ids < 20 then entry.train_ids[#entry.train_ids + 1] = train.id end
+      else
+        entry = {
+          count = 1,
+          train_ids = { train.id },
+          group = grouped and group or nil,
+          train = train,
+          references = schedule_references(schedule, station),
+        }
+        schedules[key] = entry
+        if #entry.references > 0 then configured[#configured + 1] = entry end
       end
 
-      seen[key] = entry
-      if #entry.arrives > 0 or #entry.waits > 0 or #entry.triggers > 0 then
-        found[#found + 1] = entry
+      local state = waiting_for(schedule, station)
+      if state then
+        waiting[#waiting + 1] = { train = train, group = entry.group, state = state }
       end
     end
   end
 
-  return found
+  return configured, waiting
 end
 
 --- Dump every station reference the scan can see. Names are bracketed so trailing spaces and
@@ -124,9 +138,9 @@ local function dump(stop, player)
 end
 
 --- Which interrupts matched, and which trains are behind a group row.
-local function row_tooltip(entry, matches)
+local function configured_tooltip(entry)
   local parts = { "" }
-  for index, match in pairs(matches) do
+  for index, match in pairs(entry.references) do
     if index > 1 then parts[#parts + 1] = "\n" end
     local label = match.name or { "tvi.unnamed-interrupt" }
     -- A generic interrupt only routes here when its wildcard happens to bind to this
@@ -151,47 +165,66 @@ local function row_tooltip(entry, matches)
   return parts
 end
 
-local function add_section(container, caption_key, entries, field)
-  -- A group shares one schedule, so it is scanned once -- but it stands for every train in
-  -- it, and the train count is what the player is actually asking about. Count trains here,
-  -- not rows, or a six-train group reads as "(1)".
-  local rows, trains = {}, 0
-  for _, entry in pairs(entries) do
-    if #entry[field] > 0 then
-      rows[#rows + 1] = entry
-      trains = trains + entry.count
-    end
-  end
+local function add_row(container, caption, tooltip, train_id)
+  local button = container.add {
+    type = "button",
+    style = "list_box_item",
+    caption = caption,
+    tooltip = tooltip,
+    tags = { tvi_train = train_id },
+  }
+  button.style.horizontally_stretchable = true
+end
 
+local function add_header(container, caption_key, count)
   container.add {
     type = "label",
-    caption = { caption_key, trains },
+    caption = { caption_key, count },
     style = "caption_label",
   }
+end
 
-  if #rows == 0 then
+--- Schedules wired up to this stop, one row per group.
+local function add_configured(container, configured)
+  -- A group shares one schedule, so it is scanned once -- but it stands for every train in
+  -- it, and the train count is what is actually being asked about. Count trains here, not
+  -- rows, or a six-train group reads as "(1)".
+  local trains = 0
+  for _, entry in pairs(configured) do
+    trains = trains + entry.count
+  end
+
+  add_header(container, "tvi.configured", trains)
+  if #configured == 0 then
     container.add { type = "label", caption = { "tvi.none" } }
     return
   end
 
-  for _, entry in pairs(rows) do
-    local caption
-    if entry.group then
-      -- Group names are often pure rich-text icons, which render as a caption with no
-      -- readable text at all. The count keeps every row legible.
-      caption = { "tvi.row-group", entry.group, entry.count }
-    else
-      caption = { "tvi.row-train", entry.train.id }
-    end
+  for _, entry in pairs(configured) do
+    -- Group names are often pure rich-text icons, which render as a caption with no readable
+    -- text at all. The count keeps every row legible.
+    local caption = entry.group
+      and { "tvi.row-group", entry.group, entry.count }
+      or { "tvi.row-train", entry.train.id }
 
-    local button = container.add {
-      type = "button",
-      style = "list_box_item",
-      caption = caption,
-      tooltip = row_tooltip(entry, entry[field]),
-      tags = { tvi_train = entry.train.id },
-    }
-    button.style.horizontally_stretchable = true
+    add_row(container, caption, configured_tooltip(entry), entry.train.id)
+  end
+end
+
+--- Trains that want this stop right now, one row per train.
+local function add_waiting(container, waiting)
+  add_header(container, "tvi.waiting", #waiting)
+  if #waiting == 0 then
+    container.add { type = "label", caption = { "tvi.none" } }
+    return
+  end
+
+  for _, item in pairs(waiting) do
+    local caption = item.group
+      and { "tvi.row-train-grouped", item.train.id, item.group }
+      or { "tvi.row-train", item.train.id }
+
+    add_row(container, caption, { "tvi." .. item.state }, item.train.id)
   end
 end
 
@@ -226,10 +259,9 @@ local function refresh(player, stop)
 
   if DEBUG_DUMP then dump(stop, player) end
 
-  local entries = scan(stop.backer_name, player.force)
-  add_section(content, "tvi.arrives", entries, "arrives")
-  add_section(content, "tvi.waits", entries, "waits")
-  add_section(content, "tvi.triggers", entries, "triggers")
+  local configured, waiting = scan(stop.backer_name, player.force)
+  add_configured(content, configured)
+  add_waiting(content, waiting)
 end
 
 if SELF_TEST then
