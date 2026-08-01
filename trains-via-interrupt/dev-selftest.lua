@@ -31,6 +31,60 @@ local CASES = {
   { "Holding Station", "[item=stone-brick]", nil },
 }
 
+--- Exercise the schedule API against a real train.
+--
+-- Loading the file only proves it parses. Both runtime bugs found so far were calls with the
+-- wrong shape -- passing `current` as a bare number to get_record, which wants a
+-- ScheduleRecordPosition table -- and neither could surface without a train to call them on.
+local function api_checks()
+  local lines = {}
+
+  local ok, err = pcall(function()
+    local surface = game.surfaces[1]
+    for y = -10, 10, 2 do
+      surface.create_entity {
+        name = "straight-rail", position = { 0, y },
+        direction = defines.direction.north, force = "player",
+      }
+    end
+
+    local loco = surface.create_entity {
+      name = "locomotive", position = { 0, 0 },
+      direction = defines.direction.north, force = "player",
+    }
+    if not loco then error("could not place a locomotive") end
+
+    local schedule = loco.train.get_schedule()
+    schedule.set_records { { station = "A" }, { station = "B" } }
+    schedule.add_interrupt {
+      name = "test",
+      conditions = { { type = "empty", compare_type = "and" } },
+      targets = { {
+        station = "Holding",
+        wait_conditions = {
+          { type = "specific_destination_not_full", compare_type = "and", station = "A" },
+        },
+      } },
+    }
+
+    lines[#lines + 1] = "PASS  get_schedule -> current=" .. tostring(schedule.current)
+
+    local record = schedule.get_record { schedule_index = schedule.current }
+    lines[#lines + 1] = "PASS  get_record{schedule_index=current} -> station="
+      .. tostring(record and record.station)
+
+    local interrupts = schedule.get_interrupts()
+    lines[#lines + 1] = "PASS  get_interrupts -> " .. #interrupts .. " interrupt(s)"
+
+    local target = interrupts[1].targets[1]
+    lines[#lines + 1] = "PASS  target.wait_conditions[1].station="
+      .. tostring(target.wait_conditions[1].station)
+  end)
+
+  if not ok then lines[#lines + 1] = "FAIL  api: " .. tostring(err) end
+  return lines
+end
+
 return function()
   local lines, failures = {}, 0
 
@@ -45,6 +99,12 @@ return function()
       .. "  got=" .. tostring(got)
   end
 
-  lines[#lines + 1] = failures .. " failure(s) of " .. #CASES
+  lines[#lines + 1] = failures .. " matcher failure(s) of " .. #CASES
+  lines[#lines + 1] = ""
+
+  for _, line in pairs(api_checks()) do
+    lines[#lines + 1] = line
+  end
+
   helpers.write_file("tvi-selftest.txt", table.concat(lines, "\n") .. "\n", false)
 end

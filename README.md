@@ -36,6 +36,18 @@ factorio.exe --create smoke.zip --mod-directory ./testmods --config ./config.ini
 ```
 
 where `config.ini` sets `write-data` to a scratch folder. A line reading
-`Checksum for script __<mod>__/control.lua` means the mod loaded clean. This does **not**
-exercise any GUI — that still needs a human in game.
+`Checksum for script __<mod>__/control.lua` means the mod loaded clean.
+
+**Loading clean proves only that the file parses.** Two runtime bugs shipped past it — a GUI
+that counted the wrong thing, and `get_record` called with a bare number when it wants a
+`ScheduleRecordPosition` table. Neither could surface without a train to call them on.
+
+So `dev-selftest.lua` (enable `SELF_TEST` in `control.lua`) runs during `on_init` and does two
+things: checks `matching.lua` against station names taken from a real save, and builds a rail
+and a locomotive so the schedule API is exercised for real. Results land in
+`script-output/tvi-selftest.txt` under the config's write-data path. **Add a case here whenever
+a new API call is introduced** — that is the only automated coverage of runtime behaviour.
+
+Still not covered: anything that needs a GUI. `--create` never opens one, so the panel's
+layout and event wiring need a human in game.
 

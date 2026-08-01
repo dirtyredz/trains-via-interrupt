@@ -50,7 +50,8 @@ end
 -- sends it here, or the record's wait conditions hold it somewhere else until this station
 -- frees up. Both mean the train wants this stop and does not have it yet.
 local function waiting_for(schedule, station)
-  local record = schedule.get_record(schedule.current)
+  -- `current` is a bare uint32 but get_record takes a ScheduleRecordPosition table.
+  local record = schedule.get_record { schedule_index = schedule.current }
   if not record then return nil end
 
   if reference_matches(record.station, station) then return "heading" end
