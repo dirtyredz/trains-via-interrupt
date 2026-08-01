@@ -2,7 +2,7 @@
   "name": "trains-via-interrupt",
   "version": "0.1.0",
   "title": "Trains via Interrupt",
-  "author": "David McClain",
+  "author": "Dirtyredz",
   "factorio_version": "2.1",
   "description": "Vanilla's 'Trains with this stop' tab only lists stations sitting in a train's schedule, so trains that reach a station through an interrupt are invisible from the station side. This adds a panel beside the train stop GUI with two counts: which trains are wired up to this stop through an interrupt, and which of them want it right now. Parametrised station names are matched, so drop-offs named only by a wildcard are found too.",
   "dependencies": ["base >= 2.1"]
