@@ -88,7 +88,15 @@ end
 -- Its current schedule record is the one it is actually executing, so either that record
 -- sends it here, or the record's wait conditions hold it somewhere else until this station
 -- frees up. Both mean the train wants this stop and does not have it yet.
-local function waiting_for(schedule, station, candidates)
+local function waiting_for(train, schedule, station, candidates)
+  -- A train standing at the stop has arrived -- it is loading, not queuing. Its current
+  -- record still points here, so without this it counts as on its way to a stop it is
+  -- already occupying. Compare by name because a station is a name, not one entity.
+  local stopped_at = train.station
+  if stopped_at and stopped_at.valid and stopped_at.backer_name == station then
+    return nil
+  end
+
   -- `current` is a bare uint32 but get_record takes a ScheduleRecordPosition table.
   local record = schedule.get_record { schedule_index = schedule.current }
   if not record then return nil end
@@ -134,7 +142,7 @@ local function scan(station, force)
         if #entry.references > 0 then configured[#configured + 1] = entry end
       end
 
-      local state = waiting_for(schedule, station, entry.candidates)
+      local state = waiting_for(train, schedule, station, entry.candidates)
       if state then
         waiting[#waiting + 1] = { train = train, group = entry.group, state = state }
       end

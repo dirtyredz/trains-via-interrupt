@@ -102,6 +102,10 @@ local function api_checks()
     local target = interrupts[1].targets[1]
     lines[#lines + 1] = "PASS  target.wait_conditions[1].station="
       .. tostring(target.wait_conditions[1].station)
+
+    -- Reading an attribute Factorio does not know raises, so this is a real check that the
+    -- name is right even though a parked-nowhere locomotive answers nil.
+    lines[#lines + 1] = "PASS  train.station -> " .. tostring(loco.train.station)
   end)
 
   if not ok then lines[#lines + 1] = "FAIL  api: " .. tostring(err) end
