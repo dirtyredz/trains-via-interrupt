@@ -1,7 +1,12 @@
-# factorio-mods — notes for whoever works on this next
+# trains-via-interrupt — notes for whoever works on this next
 
-In-game Factorio mods (Lua). **`factorio-bp` is a separate project** — a browser/Node tool for
-blueprint strings. Don't reach across; they share nothing but a game.
+An in-game Factorio mod (Lua), published at
+[mods.factorio.com](https://mods.factorio.com/mod/trains-via-interrupt) as `Dirtyredz`.
+The mod is in `trains-via-interrupt/`; `build.ps1` at the root zips it for the portal.
+
+**`factorio-bp` is a separate project** — a browser/Node tool for blueprint strings. Don't
+reach across; they share nothing but a game. The local folder is still called `factorio-mods`
+and the checkout is junctioned into `%APPDATA%\Factorio\mods\`, so leave that path alone.
 
 Keep the split below between **verified** (checked against the game's own output or a
 screenshot from the owner) and **inferred**. Almost every wasted round here came from confident

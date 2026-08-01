@@ -1,12 +1,11 @@
-# factorio-mods
+# trains-via-interrupt
 
-In-game Factorio mods (Lua). Separate from [`factorio-bp`](../factorio-bp), which is a
-browser/Node tool for editing blueprint *strings* outside the game — different language,
-different runtime, no shared code.
+A Factorio mod: from a train stop's GUI, which trains are wired up to it through a schedule
+interrupt, and which want it right now. Vanilla shows neither.
 
-| Mod | What it does |
-|---|---|
-| [`trains-via-interrupt/`](trains-via-interrupt/README.md) | From a train stop's GUI: which trains are wired up to it through a schedule interrupt, and which want it right now. Vanilla shows neither. |
+**[What the mod does →](trains-via-interrupt/README.md)** — the mod itself lives in
+[`trains-via-interrupt/`](trains-via-interrupt/), since that folder is what gets zipped and
+published. This repo root holds the build script and the working notes.
 
 Target: **Factorio 2.1** (installed build is 2.1.12 + Space Age, Steam).
 
