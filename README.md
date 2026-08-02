@@ -1,57 +1,70 @@
-# trains-via-interrupt
+# Trains via Interrupt
 
-A Factorio mod. Your station says no trains are coming; six are parked at a holding station
-waiting for it. Vanilla's station window ignores interrupts, so this adds a panel showing which
-trains are wired up to a stop and which want it right now.
+**Your station says no trains are coming. Six of them are parked at a holding station, waiting
+for it right now.**
 
-**[What the mod does →](trains-via-interrupt/README.md)** — the mod itself lives in
-[`trains-via-interrupt/`](trains-via-interrupt/), since that folder is what gets zipped and
-published. This repo root holds the build script and the working notes.
+Vanilla's "Trains with this stop" tab only knows about stations written into a train's
+schedule. Interrupts don't count — an interrupt's target isn't in the schedule until the
+temporary stop actually gets created. So the moment your network runs on interrupts, every
+station window quietly stops telling you the truth.
 
-Target: **Factorio 2.1** (installed build is 2.1.12 + Space Age, Steam).
+This mod adds a panel beside the train stop window with the two numbers you actually wanted.
 
-Gotchas that cost real debugging — stale version fields, wildcard semantics, which API calls
-crash — are in [CLAUDE.md](CLAUDE.md). Read it before changing matching behaviour.
+### Trains with this stop
 
-## Running a mod in game
+Every train whose interrupts mention this station, however they mention it — sent here, waiting
+on it, or triggered by it. This is your *what is wired up to this stop* number, and it barely
+changes.
 
-Factorio loads unzipped mods whose folder name matches the mod's `name` in `info.json`. A
-directory junction keeps the source here and the game loading it live:
+Train groups show as one row with a count, so a 6-train group is one line, not six.
+
+### Trains waiting for this stop
+
+Trains that want this stop **right now** — either an interrupt is sending them here, or they're
+stuck somewhere else until this stop has room. Trains already parked at the station don't
+count. They've arrived.
+
+Six wired up and zero waiting? The stop is idle. Six and six? You've found your bottleneck.
+
+## It handles parametrised networks
+
+If you build with wildcard interrupts, your drop-offs are probably never named literally
+anywhere — only as `[virtual-signal=signal-item-parameter][virtual-signal=down-arrow]`. Match
+station names naively and every drop-off in your base reports zero trains.
+
+Match wildcards *loosely* and it's worse: every train group carries the same generic interrupt,
+so one drop-off claims your entire fleet.
+
+This resolves the wildcard against the station you're actually looking at, then checks that the
+group has any business hauling that item. Your brick drop-off lists brick trains. Not all 85
+trains in the network.
+
+## Details
+
+- Click any row to open that train.
+- **Read-only.** It never writes to a schedule, so it can't eat your interrupts.
+- Everything happens when you open a stop. No per-tick cost, no save bloat.
+- Factorio 2.1. No dependencies.
+- It's a side panel rather than a third tab, because mods can't add tabs to vanilla windows.
+
+One known gap: a train group that names no station literally *and* has no item icon in its
+group name gives the mod nothing to go on, so its generic interrupts won't be matched. Naming
+groups after what they haul is enough to avoid this.
+
+Bug reports and ideas: <https://github.com/dirtyredz/trains-via-interrupt>
+
+## Development
+
+This repo is the mod folder — `info.json` sits at the root, so Factorio can load it directly.
+Point the game at it with a junction (no admin rights needed), then restart Factorio after any
+Lua edit:
 
 ```bash
-cmd /c mklink /J "%APPDATA%\Factorio\mods\trains-via-interrupt" "C:\Users\dirty\factorio-mods\trains-via-interrupt"
+cmd /c mklink /J "%APPDATA%\Factorio\mods\trains-via-interrupt" "C:\path\to\trains-via-interrupt"
 ```
 
-Junctions need no admin rights. After editing Lua, **restart Factorio**.
+`.\build.ps1` packages `dist\trains-via-interrupt_{version}.zip` for the mod portal. It refuses
+to build while `SELF_TEST` or `DEBUG_DUMP` is enabled in `control.lua`.
 
-> Don't reach for `/c game.reload_mods()`. Any console command permanently disables
-> achievements on that save, and it has to be confirmed twice. A restart is cheaper than it
-> looks.
-
-## Testing without launching the game
-
-`--create` loads every mod, runs `control.lua`, and exits — about 30 seconds. Point it at a
-throwaway config, or it collides with the running game's data-dir lock:
-
-```bash
-factorio.exe --create smoke.zip --mod-directory ./testmods --config ./config.ini
-```
-
-`config.ini` needs `write-data` set to a scratch folder. `Checksum for script
-__<mod>__/control.lua` in the output means the mod loaded.
-
-**That proves the file parses and nothing more.** Two runtime bugs shipped straight past it. So
-each mod carries a `dev-selftest.lua`: enable `SELF_TEST` in `control.lua` and the same
-`--create` run also exercises the mod's logic and builds a rail and a locomotive so the API is
-called against a real train. Results land in `script-output/tvi-selftest.txt` under the
-config's write-data path.
-
-**Add a case whenever a new API call is introduced.** It is the only automated coverage of
-runtime behaviour, and anything needing a GUI is still uncovered — `--create` never opens one,
-so panel layout and event wiring need a human in game.
-
-## Diagnostics from a real save
-
-To see what the owner's game actually contains, write a file from the mod (`helpers.write_file`
-lands in `script-output/`) and read it directly. Never ask them to paste a console command:
-same data, and it costs them the save's achievements.
+Working notes, verified API behaviour and the wildcard matching rules are in
+[CLAUDE.md](CLAUDE.md) — read it before changing matching.

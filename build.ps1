@@ -1,16 +1,18 @@
-# Package a mod for the Factorio mod portal.
+# Package this mod for the Factorio mod portal.
 #
-#   .\build.ps1                       # builds trains-via-interrupt
-#   .\build.ps1 -Mod some-other-mod
+#   .\build.ps1
+#
+# This repo is flat: the repo root is the mod folder, so the game can load it through a
+# junction without a nested copy. That means the source lives alongside this script, and the
+# zip is assembled from an explicit file list rather than by copying the whole directory --
+# .git, dist and the working notes must not ship.
 #
 # The portal requires the zip itself to be named {mod-name}_{version}; the folder inside it is
 # unconstrained, but matching it keeps unzipped installs tidy.
 
-param([string]$Mod = "trains-via-interrupt")
-
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
-$src = Join-Path $root $Mod
+$src = $root
 
 $info = Get-Content (Join-Path $src "info.json") -Raw | ConvertFrom-Json
 $stamp = "$($info.name)_$($info.version)"

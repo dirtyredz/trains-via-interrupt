@@ -2,49 +2,33 @@
 
 An in-game Factorio mod (Lua), published at
 [mods.factorio.com](https://mods.factorio.com/mod/trains-via-interrupt) as `Dirtyredz`.
-The mod is in `trains-via-interrupt/`; `build.ps1` at the root zips it for the portal.
+This folder is both the git repo and the mod folder — `info.json` sits at the root, so the
+game loads it directly through the junction. `build.ps1` zips it for the portal.
 
-**`factorio-bp` is a separate project** — a browser/Node tool for blueprint strings. Don't
-reach across; they share nothing but a game. The local folder is still called `factorio-mods`
-and the checkout is junctioned into `%APPDATA%\Factorio\mods\`, so leave that path alone.
+General environment, testing and publishing practice lives in the parent folder's
+[`../CLAUDE.md`](../CLAUDE.md). Read that first; this file only covers what is specific to
+this mod.
 
 Keep the split below between **verified** (checked against the game's own output or a
 screenshot from the owner) and **inferred**. Almost every wasted round here came from confident
 reasoning about semantics that real data then contradicted.
 
-## Environment
+## What it does
 
-- **Factorio 2.1.12 + Space Age**, Steam, at
-  `C:\Program Files (x86)\Steam\steamapps\common\Factorio`. Verified from the game's log banner.
-- **`player-data.json`'s `last-played-version` lies** — it read 2.0.77 while the installed build
-  was 2.1.12, and `info.json` targeting `"2.0"` was rejected outright. Trust the log, not that
-  field.
-- Each mod folder is junctioned into `%APPDATA%\Factorio\mods\`, so the game loads this source
-  live. `mklink /J` needs no admin.
+Adds a side panel to the train stop GUI showing which trains are wired up to that stop via
+**interrupts**, and which want it right now. Vanilla's "Trains with this stop" tab only knows
+about stations written literally into a schedule, so interrupt-driven networks get told
+nothing.
 
-## Testing
+## Self-test
 
-```bash
-factorio.exe --create smoke.zip --mod-directory ./testmods --config ./config.ini
-```
+`dev-selftest.lua` runs during `on_init` when `SELF_TEST` is enabled in `control.lua`. It
+builds a rail and a locomotive so the API is exercised against a real train, and writes
+results to `script-output/tvi-selftest.txt`. **Add a case whenever a new API call is
+introduced.**
 
-`config.ini` must set `write-data` to a scratch folder, or this collides with the running
-game's data-dir lock. `Checksum for script __<mod>__/control.lua` in the output means it loaded.
-
-**Loading clean proves only that the file parses.** Two bugs reached the owner's game past it:
-a GUI counting the wrong thing, and `get_record` called with a bare number. So each mod carries
-a `dev-selftest.lua` (enable `SELF_TEST`) that runs during `on_init` and builds a rail and a
-locomotive so the API is exercised against a real train. **Add a case whenever a new API call is
-introduced.** Anything needing a GUI is still uncovered — `--create` never opens one.
-
-## Working with the owner
-
-**Never ask them to run a `/c` console command.** It permanently disables achievements on the
-save, and they have to run it twice to confirm. Write diagnostics from the mod to
-`script-output/` instead and read the file directly — same data, no cost to them.
-
-Their screenshots are ground truth. A dump of their real schedules settled in one round what
-three rounds of reasoning had got backwards.
+The panel itself is still uncovered — `--create` never opens a GUI, so layout and event
+wiring need a human in game.
 
 ## Runtime API facts (verified)
 
@@ -59,7 +43,6 @@ three rounds of reasoning had got backwards.
 - Relative GUI anchoring to `defines.relative_gui_type.train_stop_gui` **works** (confirmed by
   screenshot). There is an open report that `train_gui` anchoring broke in 2.0 — that one is
   fullscreen; the stop GUI is an ordinary entity GUI and is unaffected.
-- A mod cannot add a tab to a vanilla tabbed pane. A side panel is the only option.
 
 ## Interrupt wildcards — read before touching matching
 
