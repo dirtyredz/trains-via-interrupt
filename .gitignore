@@ -1,2 +1,6 @@
 # Built mod archives
 *.zip
+
+# structure-review gate marker (local state, never committed)
+.structure-review-pending*
+.structure-review-paused
