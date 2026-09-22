@@ -59,7 +59,22 @@ game and opening a train stop by hand — unverifiable risk, on three files, for
   a `DEBUG_DUMP` diagnostic writer. `matching.lua` already took the pure logic out; the remaining
   seam is scan-vs-GUI, which would give the scan the same testability matching has. Under the
   ~800-line cap and not urgent — deferred because the GUI half is exactly what `dev-selftest.lua`
-  cannot verify, so a split would need a human in game to confirm.
+  cannot verify, so a split would need a human in game to confirm. Checked again at the 2026-09-22
+  baseline against the current code — still accurate, not stale.
+- **[P2] `matching.lua:8`** (from the 2026-09-22 Codex sign-off): the module owns the Factorio
+  WaitCondition schema and condition-record traversal (`STATION_CONDITION`, `conditions_match()`)
+  despite being declared as the pure string-matching boundary, so schedule-shape knowledge is
+  split between `matching.lua` and `control.lua`. Direction: move `STATION_CONDITION` and
+  `conditions_match()` to the scan side of `control.lua`, or into a scanner module if the
+  documented scan-vs-GUI split above is later performed. Tracked in `BACKLOG.md`.
 - Known behavioural gap (not structural, recorded in `CLAUDE.md` and `README.md`): a train group
   that names no station literally and has no item icon in its group name gives the matcher no
   evidence, so it is under-reported rather than over-reported.
+
+## Review history
+
+**Last full review: 2026-09-22** — baseline review over the whole codebase: 3 Claude structure
+lenses (componentization, abstraction, topology) + a Codex cross-model sign-off. Verdict: PASS, no
+P0. Topology: SOUND. One surviving P2 (above, in `matching.lua`); two other Claude findings were
+reviewed and rejected by the Codex sign-off as churn (see `BACKLOG.md` for detail). STRUCTURE.md,
+README.md and CLAUDE.md were each verified accurate against the code by multiple reviewers.
