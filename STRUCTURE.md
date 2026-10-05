@@ -66,7 +66,7 @@ game and opening a train stop by hand — unverifiable risk, on three files, for
   despite being declared as the pure string-matching boundary, so schedule-shape knowledge is
   split between `matching.lua` and `control.lua`. Direction: move `STATION_CONDITION` and
   `conditions_match()` to the scan side of `control.lua`, or into a scanner module if the
-  documented scan-vs-GUI split above is later performed. Tracked in `BACKLOG.md`.
+  documented scan-vs-GUI split above is later performed. Tracked as a Docket item (`dk list`).
 - Known behavioural gap (not structural, recorded in `CLAUDE.md` and `README.md`): a train group
   that names no station literally and has no item icon in its group name gives the matcher no
   evidence, so it is under-reported rather than over-reported.
@@ -76,5 +76,5 @@ game and opening a train stop by hand — unverifiable risk, on three files, for
 **Last full review: 2026-09-22** — baseline review over the whole codebase: 3 Claude structure
 lenses (componentization, abstraction, topology) + a Codex cross-model sign-off. Verdict: PASS, no
 P0. Topology: SOUND. One surviving P2 (above, in `matching.lua`); two other Claude findings were
-reviewed and rejected by the Codex sign-off as churn (see `BACKLOG.md` for detail). STRUCTURE.md,
+reviewed and rejected by the Codex sign-off as churn (see `DECISIONS.md` for detail). STRUCTURE.md,
 README.md and CLAUDE.md were each verified accurate against the code by multiple reviewers.

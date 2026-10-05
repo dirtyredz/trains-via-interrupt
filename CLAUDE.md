@@ -69,3 +69,10 @@ Note this is *not* the enumeration the base game
 [declined to do](https://forums.factorio.com/viewtopic.php?p=628111&t=118449). They objected to
 resolving a wildcard forwards — every item it might become. Asked from the station side you only
 ever test one known name against one pattern.
+
+## Work items (Docket)
+
+Track work in `docs/items/` through `dk`. Use filtered `dk list --json` and `dk show`; use `add`, `set`,
+and `link` for changes. Never invent IDs or ranks. Claim work in the current worktree, release it when
+finished, and run `dk check` before pushing. Drop items instead of deleting them. Living docs remain
+ordinary Markdown.
